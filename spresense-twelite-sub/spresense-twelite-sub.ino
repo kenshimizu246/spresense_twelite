@@ -126,37 +126,41 @@ void send_ext_msg(unsigned char address, uint16_t seq, unsigned char cmd, unsign
   int i, x, idx = 0; // add command 1 byte
   // int s = 11 + len + 1;
   unsigned char payload[80];
-  payload[0] = 0XA5;
-  payload[1] = 0X5A;
-  payload[2] = 0X80;
-  payload[3] = 0xFF; // data_len
-  payload[4] = address; // address
-  payload[5] = 0XA0; // command
-  payload[6] = seq; // 0x01; // resp id
+  uint16_t ii = 0;
+  payload[ii++] = 0XA5;
+  payload[ii++] = 0X5A;
+  payload[ii++] = 0X80;
+  payload[ii++] = 0xFF; // data_len
+  payload[ii++] = address; // address
+  payload[ii++] = 0XA0; // command
+  payload[ii++] = seq; // 0x01; // resp id
   // No extend address
   // start option from here
-  payload[7] = 0x01; // ack
-  payload[8] = 0x02; // resending
-  payload[9] = 0x0A; // once
-  payload[10] = 0xFF; // end option
+  payload[ii++] = 0x01; // ack
 
-  int idx_cmd = 11;
+  payload[ii++] = 0x02; // resending
+  payload[ii++] = 0x0A; // once
+  payload[ii++] = 0xFF; // end option
+
+  int hdr_len = ii;
+  int idx_cmd = ii;
   int idx_params = idx_cmd + 1;
 
-  MPLog("params_len:[%d]\n", params_len);
-  MPLog("data_len:[%d]\n", len);
+  // MPLog("idx_cmd:[%d]\n", idx_cmd);
+  // MPLog("params_len:[%d]\n", params_len);
+  // MPLog("data_len:[%d]\n", len);
 
   payload[idx_cmd] = cmd; // comman
   for(i = 0; i < params_len; i++){
     payload[idx_params + i] = params[i];
   }
-   
-  int data_len = (11 - 4) + len + 1 + params_len; // 1 for command
+  
+  int data_len = (hdr_len - 4) + len + 1 + params_len; // 1 for command
   payload[3] = (data_len & 0xFF); // data_len
 
-  memcpy(payload + 11 + 1 + params_len, data, len); // copy after command
-  int xor_idx = len + 11 + 1 + params_len; // header + data length + command
-  MPLog("xor_idx:%d\n", xor_idx);
+  memcpy(payload + hdr_len + 1 + params_len, data, len); // copy after command
+  int xor_idx = len + hdr_len + 1 + params_len; // header + data length + command
+  // MPLog("xor_idx:%d\n", xor_idx);
 
   x = 0;
   for(i = 4; i < xor_idx; i++){
@@ -164,14 +168,16 @@ void send_ext_msg(unsigned char address, uint16_t seq, unsigned char cmd, unsign
   }
   payload[xor_idx] = x;
   
+  /*
   MPLog("---------------------------\n");
   for(i = 0; i < (xor_idx + 1); i++){
-      MPLog("resp[%d]:%#02x\n", i, payload[i]);
+      MPLog("payload[%d]:%#02x\n", i, payload[i]);
   }
+  */
 
   Serial2.write(payload, (xor_idx + 1));
   
-  MPLog("---------------------------\n");
+  // MPLog("---------------------------\n");
   unsigned char c, bb[256];
   i = 0;
   while(Serial2.available() > 0){
@@ -179,9 +185,9 @@ void send_ext_msg(unsigned char address, uint16_t seq, unsigned char cmd, unsign
       if(i < 256){
           bb[i++] = c;
       }
-      MPLog("resp:%#02x\n", c);
+      // MPLog("resp:%#02x\n", c);
   }
-  MPLog("---------------------------\n");
+  // MPLog("---------------------------\n");
 }
 
 
@@ -247,11 +253,17 @@ void loop() {
     seq = 0;
     params[0] = (total_seq >> 8) & 0xFF;
     params[1] = total_seq & 0xFF;
-    MPLog("send_ext_msg first: %d : %d : %d : %d : %d\n", addr, seq, cmd, (msgdata + total_sent), data_len);
+    MPLog("send_ext_msg first: addr:%d, seq:%d, cmd:%d, data_len:%d, total_seq:%d\n", addr, seq, cmd, data_len, total_seq);
     send_ext_msg(addr, seq++, cmd, params, 2, (msgdata + total_sent), data_len);
     total_sent += data_len;
     cmd = CMD_WRITE_DATA;
-
+  
+    MPLog("---------------------------\n");
+    for(i = 0; i < 10; i++){
+      MPLog("msgdata[%d]:%#02x\n", i, msgdata[i]);
+    }
+    MPLog("---------------------------\n");
+  
     do{
       if((dtsize - total_sent) < data_len){
         data_len = dtsize - total_sent;
@@ -261,7 +273,7 @@ void loop() {
       params[1] = seq & 0xFF;
       send_ext_msg(addr, seq++, cmd, params, 2, (msgdata + total_sent), data_len);
       total_sent += data_len;
-      // MPLog("send_ext_msg: %d/%d, %d\n", total_sent, dtsize, data_len);
+      MPLog("send_ext_msg: %d/%d, %d\n", total_sent, dtsize, data_len);
     }while(total_sent < dtsize);
 
     MPLog("SENT!!! %d/%d", total_sent, dtsize);
