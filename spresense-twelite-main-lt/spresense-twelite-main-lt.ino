@@ -9,11 +9,6 @@
 MPMutex mutex(MP_MUTEX_ID0);
 
 #include <Camera.h>
-#include "Adafruit_ILI9341.h"
-
-#define TFT_DC 9
-#define TFT_CS 10
-Adafruit_ILI9341 display = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
 const int subcore = 1;   // サブコア1を使用
 const int imgBufferSize = (320 * 240 * 2) + 4;
@@ -30,9 +25,6 @@ void CamCB(CamImage img) {
     CamErr e;
 
     img.convertPixFormat(CAM_IMAGE_PIX_FMT_RGB565);
-    display.drawRGBBitmap(0, 0 /* 開始座標 */
-        , (uint16_t*)img.getImgBuff() /* 画像データ */ 
-        , 320, 240); /* 横幅、縦幅  */
 
     e = imgTmp.convertPixFormat(CAM_IMAGE_PIX_FMT_YUV422);
     if(e != CAM_ERR_SUCCESS){
@@ -76,21 +68,49 @@ void CamCB(CamImage img) {
         }
       }
     }
+  } else {
+    MPLog("Image is not available!\n");
   }
 }
 
 void setup() {
-  display.begin(); //　液晶ディスプレイの開始
-  theCamera.begin(); // カメラの開始
-  display.setRotation(3); // ディスプレイの向きを設定
-  theCamera.startStreaming(true, CamCB); // カメラのストリーミングを開始
+  theCamera.begin();
+  // setStillPictureImageFormat() .
+  // theCamera.startStreaming(true, CamCB); // カメラのストリーミングを開始
+    theCamera.setStillPictureImageFormat(
+     CAM_IMGSIZE_QVGA_H,
+     CAM_IMGSIZE_QVGA_V,
+     CAM_IMAGE_PIX_FMT_YUV422);
   Serial.begin(9600);
+  
+  LowPower.begin();
+  LowPower.clockMode(CLOCK_MODE_32MHz);
+  bootcause_e bc = LowPower.bootCause(); /* get boot cause */
+
+  if ((bc == POR_SUPPLY) || (bc == POR_NORMAL)) {
+    MPLog("Power on reset: %d\n", bc);
+  } else {
+    MPLog("Wakeup from deep sleep: %d\n", bc);
+  }
 
   int ret = MP.begin(subcore);  // サブコア1を起動
   if(ret < 0){
     MPLog("MP.begin error: %d\n", ret);
   }
+  MP.RecvTimeout(MP_RECV_BLOCKING); 
 }
 
 void loop() {
+  MPLog("loop start...\n");
+  sleep(1); 
+  CamImage img = theCamera.takePicture();
+  MPLog("took picture..\n");
+  CamCB(img);
+  
+  int8_t msgid, subid;  // main core message id
+  int8_t send_status = 0;
+  int ret;
+  ret = MP.Recv(&msgid, &send_status, 1);
+  LowPower.deepSleep(60);
+  MPLog("loop end...\n");
 }

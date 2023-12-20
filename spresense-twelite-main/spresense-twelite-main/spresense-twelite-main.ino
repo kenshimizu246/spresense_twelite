@@ -76,6 +76,7 @@ void CamCB(CamImage img) {
     }
   }
 }
+
 void setup() {
   display.begin(); //　液晶ディスプレイの開始
   theCamera.begin(); // カメラの開始
